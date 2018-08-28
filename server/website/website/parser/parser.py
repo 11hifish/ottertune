@@ -36,6 +36,8 @@ class Parser(object):
                 DBMSCatalog.objects.get(
                     type=DBMSType.POSTGRES, version='9.5').pk: Postgres96Parser('9.5'),
                 DBMSCatalog.objects.get(
+                    type=DBMSType.POSTGRES, version='10').pk: Postgres96Parser('10'),
+                DBMSCatalog.objects.get(
                     type=DBMSType.MYROCKS, version='5.6').pk: MyRocks56Parser()
             }
         try:
