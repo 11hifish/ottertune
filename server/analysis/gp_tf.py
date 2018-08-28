@@ -379,6 +379,10 @@ class GPRGD(GPR):
             self.ops['sig_val2'] = sig_val
             self.ops['loss_op'] = loss
             self.ops['train_op'] = train
+
+            # save the fitted model
+            saver = tf.train.Saver()
+            saver.save(sess, 'saved_gp/')
         return self
 
     def predict(self, X_test, constraint_helper=None,  # pylint: disable=arguments-differ
