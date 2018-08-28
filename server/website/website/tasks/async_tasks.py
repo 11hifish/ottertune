@@ -173,6 +173,7 @@ def configuration_recommendation(target_data):
 
     # Load mapped workload data
     mapped_workload_id = target_data['mapped_workload'][0]
+    LOG.info('mapped_workload_id {}'.format(mapped_workload_id))
 
     mapped_workload = Workload.objects.get(pk=mapped_workload_id)
     workload_knob_data = PipelineData.objects.get(
@@ -192,11 +193,16 @@ def configuration_recommendation(target_data):
     y_columnlabels = np.array(workload_metric_data['columnlabels'])
     rowlabels_workload = np.array(workload_metric_data['rowlabels'])
 
+    LOG.info('X_workload shape {};{}'.format(len(X_workload), len(X_workload[0])))
+    LOG.info('y_workload shape {};{}'.format(len(y_workload), len(y_workload[0])))
+
     # Target workload data
     newest_result = Result.objects.get(pk=target_data['newest_result_id'])
     X_target = target_data['X_matrix']
     y_target = target_data['y_matrix']
     rowlabels_target = np.array(target_data['rowlabels'])
+
+    LOG.info('X_target shape {};{}'.format(len(X_target), len(X_target[0])))
 
     if not np.array_equal(X_columnlabels, target_data['X_columnlabels']):
         raise Exception(('The workload and target data should have '
