@@ -514,6 +514,32 @@ class GPRGD(GPR):
             beta = 1
         return beta
 
+class GPRGD_RESTORE(GPRGD):
+
+    def __init__(self,
+                 length_scale=1.0,
+                 magnitude=1.0,
+                 max_train_size=7000,
+                 batch_size=3000,
+                 num_threads=4,
+                 learning_rate=0.01,
+                 epsilon=1e-6,
+                 max_iter=100,
+                 sigma_multiplier=3.0,
+                 mu_multiplier=1.0):
+
+        super(GPRGD_RESTORE, self).__init__(length_scale=length_scale,
+                                            magnitude=magnitude,
+                                            max_train_size=max_train_size,
+                                            batch_size=batch_size,
+                                            num_threads=num_threads,
+                                            learning_rate=learning_rate,
+                                            epsilon=epsilon,
+                                            max_iter=max_iter,
+                                            sigma_multiplier=sigma_multiplier,
+                                            mu_multiplier=mu_multiplier)
+
+
 
 # def gp_tf(X_train, y_train, X_test, ridge, length_scale, magnitude, batch_size=3000):
 #    with tf.Graph().as_default():

@@ -164,74 +164,80 @@ def configuration_recommendation(target_data):
     LOG.info('configuration_recommendation called')
     latest_pipeline_run = PipelineRun.objects.get_latest()
 
-    if target_data['bad'] is True:
-        target_data_res = {}
-        target_data_res['status'] = 'bad'
-        target_data_res['info'] = 'WARNING: no training data, the config is generated randomly'
-        target_data_res['recommendation'] = target_data['config_recommend']
-        return target_data_res
+    LOG.info('latest pipeline run is None: {}'.format(latest_pipeline_run is None))
+
+    # if target_data['bad'] is True:
+    #     target_data_res = {}
+    #     target_data_res['status'] = 'bad'
+    #     target_data_res['info'] = 'WARNING: no training data, the config is generated randomly'
+    #     target_data_res['recommendation'] = target_data['config_recommend']
+    #     return target_data_res
 
     # Load mapped workload data
-    mapped_workload_id = target_data['mapped_workload'][0]
-    LOG.info('mapped workload id : {}'.format(mapped_workload_id))
+    LOG.info('skipping load mapped workload .. nothing to be mapped')
+    # mapped_workload_id = target_data['mapped_workload'][0]
+    # LOG.info('mapped workload id : {}'.format(mapped_workload_id))
 
-    mapped_workload = Workload.objects.get(pk=mapped_workload_id)
-    workload_knob_data = PipelineData.objects.get(
-        pipeline_run=latest_pipeline_run,
-        workload=mapped_workload,
-        task_type=PipelineTaskType.KNOB_DATA)
-    workload_knob_data = JSONUtil.loads(workload_knob_data.data)
-    workload_metric_data = PipelineData.objects.get(
-        pipeline_run=latest_pipeline_run,
-        workload=mapped_workload,
-        task_type=PipelineTaskType.METRIC_DATA)
-    workload_metric_data = JSONUtil.loads(workload_metric_data.data)
+    # mapped_workload = Workload.objects.get(pk=mapped_workload_id)
+    # workload_knob_data = PipelineData.objects.get(
+    #     pipeline_run=latest_pipeline_run,
+    #     workload=mapped_workload,
+    #     task_type=PipelineTaskType.KNOB_DATA)
+    # workload_knob_data = JSONUtil.loads(workload_knob_data.data)
+    # workload_metric_data = PipelineData.objects.get(
+    #     pipeline_run=latest_pipeline_run,
+    #     workload=mapped_workload,
+    #     task_type=PipelineTaskType.METRIC_DATA)
+    # workload_metric_data = JSONUtil.loads(workload_metric_data.data)
 
-    X_workload = np.array(workload_knob_data['data'])
-    X_columnlabels = np.array(workload_knob_data['columnlabels'])
-    y_workload = np.array(workload_metric_data['data'])
-    y_columnlabels = np.array(workload_metric_data['columnlabels'])
-    rowlabels_workload = np.array(workload_metric_data['rowlabels'])
+    # X_workload = np.array(workload_knob_data['data'])
+    # X_columnlabels = np.array(workload_knob_data['columnlabels'])
+    # y_workload = np.array(workload_metric_data['data'])
+    # y_columnlabels = np.array(workload_metric_data['columnlabels'])
+    # rowlabels_workload = np.array(workload_metric_data['rowlabels'])
 
-    LOG.info('X_ workload shape {}:{}'.format(len(X_workload), len(X_workload[0])))
-    LOG.info('y_ workload shape {}:{}'.format(len(y_workload), len(y_workload[0])))
-
-    # Target workload data
+    # Target workload data (observations)
     newest_result = Result.objects.get(pk=target_data['newest_result_id'])
+    LOG.info('newest result id: {}'.format(newest_result))
+
     X_target = target_data['X_matrix']
     y_target = target_data['y_matrix']
     rowlabels_target = np.array(target_data['rowlabels'])
 
     LOG.info('X_target shape {}:{}'.format(len(X_target), len(X_target[0])))
 
-    if not np.array_equal(X_columnlabels, target_data['X_columnlabels']):
-        raise Exception(('The workload and target data should have '
-                         'identical X columnlabels (sorted knob names)'))
-    if not np.array_equal(y_columnlabels, target_data['y_columnlabels']):
-        raise Exception(('The workload and target data should have '
-                         'identical y columnlabels (sorted metric names)'))
+    # if not np.array_equal(X_columnlabels, target_data['X_columnlabels']):
+    #     raise Exception(('The workload and target data should have '
+    #                      'identical X columnlabels (sorted knob names)'))
+    # if not np.array_equal(y_columnlabels, target_data['y_columnlabels']):
+    #     raise Exception(('The workload and target data should have '
+    #                      'identical y columnlabels (sorted metric names)'))
 
     # Filter Xs by top 10 ranked knobs
-    ranked_knobs = PipelineData.objects.get(
-        pipeline_run=latest_pipeline_run,
-        workload=mapped_workload,
-        task_type=PipelineTaskType.RANKED_KNOBS)
-    ranked_knobs = JSONUtil.loads(ranked_knobs.data)[:IMPORTANT_KNOB_NUMBER]
-    ranked_knob_idxs = [i for i, cl in enumerate(X_columnlabels) if cl in ranked_knobs]
-    X_workload = X_workload[:, ranked_knob_idxs]
-    X_target = X_target[:, ranked_knob_idxs]
-    X_columnlabels = X_columnlabels[ranked_knob_idxs]
+    LOG.info('skipping ranking knobs ..')
+    # ranked_knobs = PipelineData.objects.get(
+    #     pipeline_run=latest_pipeline_run,
+    #     workload=mapped_workload,
+    #     task_type=PipelineTaskType.RANKED_KNOBS)
+    # ranked_knobs = JSONUtil.loads(ranked_knobs.data)[:IMPORTANT_KNOB_NUMBER]
+    # ranked_knob_idxs = [i for i, cl in enumerate(X_columnlabels) if cl in ranked_knobs]
+    # X_workload = X_workload[:, ranked_knob_idxs]
+    # X_target = X_target[:, ranked_knob_idxs]
+    # X_columnlabels = X_columnlabels[ranked_knob_idxs]
 
     # Filter ys by current target objective metric
+
+    # TODO: find y_columnlables, X_columnlabels
+
     target_objective = newest_result.session.target_objective
     target_obj_idx = [i for i, cl in enumerate(y_columnlabels) if cl == target_objective]
-    if len(target_obj_idx) == 0:
-        raise Exception(('Could not find target objective in metrics '
-                         '(target_obj={})').format(target_objective))
-    elif len(target_obj_idx) > 1:
-        raise Exception(('Found {} instances of target objective in '
-                         'metrics (target_obj={})').format(len(target_obj_idx),
-                                                           target_objective))
+    # if len(target_obj_idx) == 0:
+    #     raise Exception(('Could not find target objective in metrics '
+    #                      '(target_obj={})').format(target_objective))
+    # elif len(target_obj_idx) > 1:
+    #     raise Exception(('Found {} instances of target objective in '
+    #                      'metrics (target_obj={})').format(len(target_obj_idx),
+    #                                                        target_objective))
 
     metric_meta = MetricCatalog.objects.get_metric_meta(newest_result.session.dbms,
                                                         newest_result.session.target_objective)
@@ -309,12 +315,6 @@ def configuration_recommendation(target_data):
                                               init_flip_prob=INIT_FLIP_PROB,
                                               flip_prob_decay=FLIP_PROB_DECAY)
 
-    # FIXME (dva): check if these are good values for the ridge
-    # ridge = np.empty(X_scaled.shape[0])
-    # ridge[:X_target.shape[0]] = 0.01
-    # ridge[X_target.shape[0]:] = 0.1
-
-    # FIXME: we should generate more samples and use a smarter sampling
     # technique
     num_samples = NUM_SAMPLES
     X_samples = np.empty((num_samples, X_scaled.shape[1]))
