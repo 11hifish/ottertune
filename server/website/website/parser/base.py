@@ -5,9 +5,7 @@
 #
 '''
 Created on Dec 12, 2017
-
 @author: dvanaken
-
 Parser interface.
 '''
 
@@ -17,9 +15,8 @@ from collections import OrderedDict
 from website.models import KnobCatalog, MetricCatalog
 from website.types import BooleanType, MetricType, VarType
 
-
 # pylint: disable=no-self-use
-class BaseParser(object, metaclass=ABCMeta):
+class BaseParser(object):
 
     def __init__(self, dbms_id):
         self.dbms_id_ = dbms_id
@@ -271,7 +268,7 @@ class BaseParser(object, metaclass=ABCMeta):
                 valid_metrics[name] = values[0]
             elif metric.metric_type == MetricType.COUNTER or \
                     metric.metric_type == MetricType.STATISTICS:
-                values = [int(v) for v in values if v is not None]
+                values = [int(float(v)) for v in values if v is not None]
                 if len(values) == 0:
                     valid_metrics[name] = 0
                 else:
