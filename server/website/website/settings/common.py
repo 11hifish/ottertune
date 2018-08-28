@@ -205,7 +205,10 @@ INSTALLED_APPS = (
 # ==============================================
 
 # Broker URL for RabbitMq
-BROKER_URL = 'amqp://guest:guest@localhost:5672//'
+# BROKER_URL = 'amqp://guest:guest@localhost:5672//'
+BROKER_URL = 'django://'
+
+INSTALLED_APPS += ('kombu.transport.django', )
 
 # Enable finer-grained reporting: will report 'started' when
 # task is executed by a worker.
