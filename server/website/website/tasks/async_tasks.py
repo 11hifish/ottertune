@@ -386,6 +386,7 @@ def configuration_recommendation(target_data):
     # best_config_idx = np.argmin(res.minl.ravel())
     # best_config = res.minl_conf[best_config_idx, :]
     best_config = global_argmin_x
+    LOG.info('global argmin x found {}'.format(best_config))
     best_config = X_scaler.inverse_transform(best_config)
     # Decode one-hot encoding into categorical knobs
     best_config = dummy_encoder.inverse_transform(best_config)
