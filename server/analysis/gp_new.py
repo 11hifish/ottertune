@@ -207,13 +207,14 @@ class GP_UCB(object):
 
     def restore_existing_model(self, path='saved_gp/model.ckpt'):
         self.saver.restore(self.sess, path)
-        X_train = self.sess.run(self.X_train)
-        if X_train is None:
-            raise Exception('restore failed. No X train data.')
-        x_dim = X_train.shape[1]
+        if self.X_train is None:
+            raise Exception('Restore failed. No X train tensor.')
+        X_train_val = self.sess.run(self.X_train)
+        x_dim = X_train_val.shape[1]
         with self.graph.as_default():
             self.build_graph_ucb(x_dim)
-            all_vars_graph_ucb = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='graph_ucb')
+            all_vars_graph_ucb = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,
+                                                   scope='graph_ucb')
             self.sess.run(tf.initialize_variables(all_vars_graph_ucb))
 
     def check_X_y(self, X, y):
