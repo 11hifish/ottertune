@@ -76,46 +76,49 @@ class GP_UCB(object):
         na = tf.reshape(na, [-1, 1])
         nb = tf.reshape(nb, [1, -1])
         # return pairwise euclidead difference matrix
-        res = tf.sqrt(na - 2 * tf.matmul(X1, X2, False, True) + nb)
+        res = tf.sqrt(tf.maximum(na - 2 * tf.matmul(X1, X2, False, True) + nb, 0.0))
         return res
 
     def _calc_exp_kernel(self, X1, X2, magnitude, length_scale, ridge=None):
         dist = self._calc_euc_distance(X1, X2)
         pure_exp_kernel = magnitude * tf.exp(-dist / length_scale)
-        if ridge is None:
-            return pure_exp_kernel
-        else:
-            return pure_exp_kernel + tf.diag(ridge)
+        return pure_exp_kernel
+        # if ridge is None:
+        #     return pure_exp_kernel
+        # else:
+        #     return pure_exp_kernel + tf.diag(ridge)
 
     def build_graph_basic_gp(self):
         with tf.variable_scope('graph_gp'):
             # Nodes for distance computation
-            self.X_train_place = tf.placeholder(tf.float32, name="X_train")
+            self.X_train_place = tf.placeholder(tf.float64, name="X_train")
             self.X_train = tf.Variable([0], name='X_train_var',
-                                       dtype=tf.float32, validate_shape=False)
+                                       dtype=tf.float64, validate_shape=False)
             self.store_X_train = tf.assign(self.X_train, self.X_train_place,
                                            validate_shape=False)
             # Compute exp kernel
-            self.K = tf.Variable([0], name='kernel', dtype=tf.float32, validate_shape=False)
-            self.ridge = tf.placeholder(name='ridge', dtype=tf.float32)
+            self.K = tf.Variable([0], name='kernel', dtype=tf.float64, validate_shape=False)
+            self.ridge = tf.placeholder(name='ridge', dtype=tf.float64)
 
             self.calc_kernel = tf.assign(self.K, self._calc_exp_kernel(self.X_train, self.X_train, self.magnitude,
                                          self.length_scale, self.ridge),
                                          validate_shape=False)
             # Compute kernel * y_train
-            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float32, validate_shape=False)
-            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float32)
+            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float64, validate_shape=False)
+            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float64)
             K_inv = tf.matrix_inverse(self.K)
             self.calc_K_y = tf.assign(self.K_y, tf.matmul(K_inv, self.y_train_place),
                                       validate_shape=False)
+
+            self.dist = self._calc_euc_distance(self.X_train, self.X_train)
 
     def build_graph_ucb(self, x_train_dim):
         with tf.variable_scope('graph_ucb'):
             # Input for prediction ( finding argmin UCB(x) )
             init_val = np.reshape(np.array([0] * x_train_dim), (1, -1))
-            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float32,
+            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float64,
                                         validate_shape=False)
-            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float32)
+            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float64)
             self.assign_X_argmin = tf.assign(self.X_argmin, self.X_test_place,
                                              validate_shape=False)
             # K2 = Kernel(X_train, X_test)
@@ -124,13 +127,13 @@ class GP_UCB(object):
             # GP posterior mean
             self.gp_post_mean = tf.cast(tf.matmul(tf.transpose(K2),
                                                   self.K_y),
-                                        tf.float32)
+                                        tf.float64)
             # GP posterior std
             K_inv = tf.matrix_inverse(self.K)
             self.gp_post_sigma = tf.cast((tf.sqrt(
                 tf.diag_part(self.magnitude - tf.matmul(tf.transpose(K2),
                                                         tf.matmul(K_inv, K2))))),
-                tf.float32)
+                tf.float64)
             # Output for prediction
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
                                                epsilon=self.epsilon)
@@ -152,15 +155,16 @@ class GP_UCB(object):
             self.build_graph_ucb(X_train_dim)
             self.sess.run(tf.global_variables_initializer())
 
+        ridge = np.ones(len(X_train)) * ridge
         # store X_train, for later computation
         self.sess.run(self.store_X_train, feed_dict={self.X_train_place: X_train})
         # compute kernel
         self.sess.run(self.calc_kernel, feed_dict={self.ridge: ridge})
         K_y_val = self.sess.run(self.calc_K_y, feed_dict={self.y_train_place: y_train})
 
-        LOG.info('K val {}'.format(self.sess.run(self.K)))
-        LOG.info('K * y {}'.format(K_y_val))
-        LOG.info('X train {}'.format(self.sess.run(self.X_train)))
+        # LOG.info('K val {}'.format(self.sess.run(self.K)))
+        # LOG.info('K * y {}'.format(K_y_val))
+        # LOG.info('X train {}'.format(self.sess.run(self.X_train)))
         return self
 
     def predict(self, X_test, X_min=None, X_max=None, constraint_helper=None,
@@ -190,16 +194,13 @@ class GP_UCB(object):
                     argmin_valid = np.maximum(argmin_valid, X_min)
                 self.sess.run(self.assign_X_argmin,
                               feed_dict={self.X_test_place: argmin_valid})
-                if (ucb_x is None or ucb_x > ucb_val) and np.isfinite(ucb_val):
+                if ucb_x is None or ucb_x > ucb_val:
                     argmin_x = argmin_valid
                     ucb_x = ucb_val
-            LOG.info('x valid {}'.format(argmin_x))
-            LOG.info('ucb {}'.format(ucb_x))
             # update global
             if (global_min_ucb is None or global_min_ucb > ucb_x) and np.isfinite(ucb_x):
                 global_min_ucb = ucb_x
                 global_argmin_x = argmin_x
-        LOG.info('global argmin x {}, min ucb {}'.format(global_argmin_x, global_min_ucb))
         return global_argmin_x, global_min_ucb
 
     def save_model(self, path='saved_gp/model.ckpt'):
