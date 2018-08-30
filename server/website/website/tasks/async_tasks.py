@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 from analysis.gp import GPRNP
 from analysis.gp_tf import GPRGD
+from analysis.gp_new import GP_UCB
 from analysis.preprocessing import Bin, DummyEncoder
 from analysis.constraints import ParamConstraintHelper
 from website.models import PipelineData, PipelineRun, Result, Workload, KnobCatalog, MetricCatalog
@@ -173,7 +174,6 @@ def configuration_recommendation(target_data):
 
     # Load mapped workload data
     mapped_workload_id = target_data['mapped_workload'][0]
-    LOG.info('mapped_workload_id {}'.format(mapped_workload_id))
 
     mapped_workload = Workload.objects.get(pk=mapped_workload_id)
     workload_knob_data = PipelineData.objects.get(
@@ -193,16 +193,11 @@ def configuration_recommendation(target_data):
     y_columnlabels = np.array(workload_metric_data['columnlabels'])
     rowlabels_workload = np.array(workload_metric_data['rowlabels'])
 
-    LOG.info('X_workload shape {};{}'.format(len(X_workload), len(X_workload[0])))
-    LOG.info('y_workload shape {};{}'.format(len(y_workload), len(y_workload[0])))
-
     # Target workload data
     newest_result = Result.objects.get(pk=target_data['newest_result_id'])
     X_target = target_data['X_matrix']
     y_target = target_data['y_matrix']
     rowlabels_target = np.array(target_data['rowlabels'])
-
-    LOG.info('X_target shape {};{}'.format(len(X_target), len(X_target[0])))
 
     if not np.array_equal(X_columnlabels, target_data['X_columnlabels']):
         raise Exception(('The workload and target data should have '
@@ -375,7 +370,7 @@ def configuration_recommendation(target_data):
         except queue.Empty:
             break
 
-    model = GPRGD(length_scale=DEFAULT_LENGTH_SCALE,
+    model = GP_UCB(length_scale=DEFAULT_LENGTH_SCALE,
                   magnitude=DEFAULT_MAGNITUDE,
                   max_train_size=MAX_TRAIN_SIZE,
                   batch_size=BATCH_SIZE,
@@ -383,13 +378,15 @@ def configuration_recommendation(target_data):
                   learning_rate=DEFAULT_LEARNING_RATE,
                   epsilon=DEFAULT_EPSILON,
                   max_iter=MAX_ITER,
-                  sigma_multiplier=DEFAULT_SIGMA_MULTIPLIER,
-                  mu_multiplier=DEFAULT_MU_MULTIPLIER)
-    model.fit(X_scaled, y_scaled, X_min, X_max, ridge=DEFAULT_RIDGE)
-    res = model.predict(X_samples, constraint_helper=constraint_helper)
+                  ucb_sigma_mult=DEFAULT_SIGMA_MULTIPLIER,
+                  ucb_mean_mult=DEFAULT_MU_MULTIPLIER)
+    model.fit(X_scaled, y_scaled, ridge=DEFAULT_RIDGE)
+    global_argmin_x, global_min_ucb = model.predict(X_samples, X_min, X_max, constraint_helper=constraint_helper)
 
-    best_config_idx = np.argmin(res.minl.ravel())
-    best_config = res.minl_conf[best_config_idx, :]
+    # best_config_idx = np.argmin(res.minl.ravel())
+    # best_config = res.minl_conf[best_config_idx, :]
+    best_config = global_argmin_x
+    LOG.info('global argmin x found {}'.format(best_config))
     best_config = X_scaler.inverse_transform(best_config)
     # Decode one-hot encoding into categorical knobs
     best_config = dummy_encoder.inverse_transform(best_config)
