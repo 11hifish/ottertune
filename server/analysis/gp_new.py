@@ -82,11 +82,10 @@ class GP_UCB(object):
     def _calc_exp_kernel(self, X1, X2, magnitude, length_scale, ridge=None):
         dist = self._calc_euc_distance(X1, X2)
         pure_exp_kernel = magnitude * tf.exp(-dist / length_scale)
-        return pure_exp_kernel
-        # if ridge is None:
-        #     return pure_exp_kernel
-        # else:
-        #     return pure_exp_kernel + tf.diag(ridge)
+        if ridge is None:
+            return pure_exp_kernel
+        else:
+            return pure_exp_kernel + tf.diag(ridge)
 
     def build_graph_basic_gp(self):
         with tf.variable_scope('graph_gp'):
