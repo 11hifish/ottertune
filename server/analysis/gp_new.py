@@ -53,13 +53,13 @@ class GP_UCB(object):
         self.assign_X_argmin = None
         self.store_X_train = None
         # construct computational graph
-        self.graph = None
-        self.build_graph_basic_gp()
+        self.graph = tf.Graph()
         # create a live session
         self.sess = tf.Session(graph=self.graph,
                                config=tf.ConfigProto(
                                    intra_op_parallelism_threads=self.num_threads_))
         with self.graph.as_default():
+            self.build_graph_basic_gp()
             self.saver = tf.train.Saver()
             self.sess.run(tf.global_variables_initializer())
 
@@ -88,8 +88,7 @@ class GP_UCB(object):
             return pure_exp_kernel + tf.diag(ridge)
 
     def build_graph_basic_gp(self):
-        self.graph = tf.Graph()
-        with self.graph.as_default():
+        with tf.variable_scope('graph_gp'):
             # Nodes for distance computation
             self.X_train_place = tf.placeholder(tf.float32, name="X_train")
             self.X_train = tf.Variable([0], name='X_train_var',
@@ -111,6 +110,7 @@ class GP_UCB(object):
                                       validate_shape=False)
 
     def build_graph_ucb(self, x_train_dim):
+        with tf.variable_scope('graph_ucb'):
             # Input for prediction ( finding argmin UCB(x) )
             init_val = np.reshape(np.array([0] * x_train_dim), (1, -1))
             self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float32,
@@ -140,10 +140,8 @@ class GP_UCB(object):
             self.find_min_ucb = optimizer.minimize(tf.expand_dims(self.ucb, 0),
                                                    var_list=[self.X_argmin])
 
-    def fit(self, X_train, y_train, X_min=None, X_max=None, ridge=0.1):
+    def fit(self, X_train, y_train, ridge=0.1):
         X_train, y_train = self.check_X_y(X_train, y_train)
-        self.X_min = X_min
-        self.X_max = X_max
 
         sample_size = X_train.shape[0]
         X_train_dim = len(X_train[0])
@@ -154,7 +152,7 @@ class GP_UCB(object):
             self.build_graph_ucb(X_train_dim)
             self.sess.run(tf.global_variables_initializer())
 
-        # store X_train for later computation
+        # store X_train, for later computation
         self.sess.run(self.store_X_train, feed_dict={self.X_train_place: X_train})
         # compute kernel
         self.sess.run(self.calc_kernel, feed_dict={self.ridge: ridge})
@@ -165,7 +163,7 @@ class GP_UCB(object):
         LOG.info('X train {}'.format(self.sess.run(self.X_train)))
         return self
 
-    def predict(self, X_test, constraint_helper=None,
+    def predict(self, X_test, X_min=None, X_max=None, constraint_helper=None,
                 categorical_feature_method='hillclimbing',
                 categorical_feature_steps=3):
         if not self._check_fitted():
@@ -185,9 +183,11 @@ class GP_UCB(object):
                 self.sess.run(self.find_min_ucb)
                 ucb_val = self.sess.run(self.ucb)
                 # constraint potential argmin UCB(x)
-                potential_argmin = self.sess.run(self.X_argmin)
-                argmin_valid = np.minimum(potential_argmin, self.X_max)
-                argmin_valid = np.maximum(argmin_valid, self.X_min)
+                argmin_valid = self.sess.run(self.X_argmin)
+                if X_max is not None:
+                    argmin_valid = np.minimum(argmin_valid, X_max)
+                if X_min is not None:
+                    argmin_valid = np.maximum(argmin_valid, X_min)
                 self.sess.run(self.assign_X_argmin,
                               feed_dict={self.X_test_place: argmin_valid})
                 if (ucb_x is None or ucb_x > ucb_val) and np.isfinite(ucb_val):
@@ -204,6 +204,17 @@ class GP_UCB(object):
 
     def save_model(self, path='saved_gp/model.ckpt'):
         self.saver.save(self.sess, path)
+
+    def restore_existing_model(self, path='saved_gp/model.ckpt'):
+        self.saver.restore(self.sess, path)
+        X_train = self.sess.run(self.X_train)
+        if X_train is None:
+            raise Exception('restore failed. No X train data.')
+        x_dim = X_train.shape[1]
+        with self.graph.as_default():
+            self.build_graph_ucb(x_dim)
+            all_vars_graph_ucb = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='graph_ucb')
+            self.sess.run(tf.initialize_variables(all_vars_graph_ucb))
 
     def check_X_y(self, X, y):
         from sklearn.utils.validation import check_X_y
