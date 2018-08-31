@@ -196,11 +196,11 @@ class GP_UCB(object):
                 if ucb_x is None or ucb_x > ucb_val:
                     argmin_x = argmin_valid
                     ucb_x = ucb_val
+            LOG.info('min ucb now {}'.format(ucb_x))
             # update global
-            if global_min_ucb is None or global_min_ucb > ucb_x:
+            if (global_min_ucb is None or global_min_ucb > ucb_x) and np.isfinite(ucb_x):
                 global_min_ucb = ucb_x
                 global_argmin_x = argmin_x
-            LOG.info('argmin, ucb {} , {}'.format(global_min_ucb, global_min_ucb))
         return global_argmin_x, global_min_ucb
 
     def save_model(self, path='saved_gp/model.ckpt'):
