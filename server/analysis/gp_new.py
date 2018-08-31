@@ -90,21 +90,21 @@ class GP_UCB(object):
     def build_graph_basic_gp(self):
         with tf.variable_scope('graph_gp'):
             # Nodes for distance computation
-            self.X_train_place = tf.placeholder(tf.float64, name="X_train")
+            self.X_train_place = tf.placeholder(tf.float32, name="X_train")
             self.X_train = tf.Variable([0], name='X_train_var',
-                                       dtype=tf.float64, validate_shape=False)
+                                       dtype=tf.float32, validate_shape=False)
             self.store_X_train = tf.assign(self.X_train, self.X_train_place,
                                            validate_shape=False)
             # Compute exp kernel
-            self.K = tf.Variable([0], name='kernel', dtype=tf.float64, validate_shape=False)
-            self.ridge = tf.placeholder(name='ridge', dtype=tf.float64)
+            self.K = tf.Variable([0], name='kernel', dtype=tf.float32, validate_shape=False)
+            self.ridge = tf.placeholder(name='ridge', dtype=tf.float32)
 
             self.calc_kernel = tf.assign(self.K, self._calc_exp_kernel(self.X_train, self.X_train, self.magnitude,
                                          self.length_scale, self.ridge),
                                          validate_shape=False)
             # Compute kernel * y_train
-            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float64, validate_shape=False)
-            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float64)
+            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float32, validate_shape=False)
+            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float32)
             K_inv = tf.matrix_inverse(self.K)
             self.calc_K_y = tf.assign(self.K_y, tf.matmul(K_inv, self.y_train_place),
                                       validate_shape=False)
@@ -115,9 +115,9 @@ class GP_UCB(object):
         with tf.variable_scope('graph_ucb'):
             # Input for prediction ( finding argmin UCB(x) )
             init_val = np.reshape(np.array([0] * x_train_dim), (1, -1))
-            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float64,
+            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float32,
                                         validate_shape=False)
-            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float64)
+            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float32)
             self.assign_X_argmin = tf.assign(self.X_argmin, self.X_test_place,
                                              validate_shape=False)
             # K2 = Kernel(X_train, X_test)
@@ -126,13 +126,13 @@ class GP_UCB(object):
             # GP posterior mean
             self.gp_post_mean = tf.cast(tf.matmul(tf.transpose(K2),
                                                   self.K_y),
-                                        tf.float64)
+                                        tf.float32)
             # GP posterior std
             K_inv = tf.matrix_inverse(self.K)
             self.gp_post_sigma = tf.cast((tf.sqrt(
                 tf.diag_part(self.magnitude - tf.matmul(tf.transpose(K2),
                                                         tf.matmul(K_inv, K2))))),
-                tf.float64)
+                tf.float32)
             # Output for prediction
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
                                                epsilon=self.epsilon)
