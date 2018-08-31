@@ -14,7 +14,6 @@ from sklearn.preprocessing import StandardScaler
 
 from analysis.gp import GPRNP
 from analysis.gp_tf import GPRGD
-from analysis.gp_new import GP_UCB
 from analysis.preprocessing import Bin, DummyEncoder
 from analysis.constraints import ParamConstraintHelper
 from website.models import PipelineData, PipelineRun, Result, Workload, KnobCatalog, MetricCatalog
@@ -370,7 +369,7 @@ def configuration_recommendation(target_data):
         except queue.Empty:
             break
 
-    model = GP_UCB(length_scale=DEFAULT_LENGTH_SCALE,
+    model = GPRGD(length_scale=DEFAULT_LENGTH_SCALE,
                   magnitude=DEFAULT_MAGNITUDE,
                   max_train_size=MAX_TRAIN_SIZE,
                   batch_size=BATCH_SIZE,
@@ -378,15 +377,14 @@ def configuration_recommendation(target_data):
                   learning_rate=DEFAULT_LEARNING_RATE,
                   epsilon=DEFAULT_EPSILON,
                   max_iter=MAX_ITER,
-                  ucb_sigma_mult=DEFAULT_SIGMA_MULTIPLIER,
-                  ucb_mean_mult=DEFAULT_MU_MULTIPLIER)
-    model.fit(X_scaled, y_scaled, ridge=DEFAULT_RIDGE)
-    global_argmin_x, global_min_ucb = model.predict(X_samples, X_min, X_max, constraint_helper=constraint_helper)
+                  sigma_multiplier=DEFAULT_SIGMA_MULTIPLIER,
+                  mu_multiplier=DEFAULT_MU_MULTIPLIER)
+    model.fit(X_scaled, y_scaled, X_min, X_max, ridge=DEFAULT_RIDGE)
+    res = model.predict(X_samples, constraint_helper=constraint_helper)
 
-    # best_config_idx = np.argmin(res.minl.ravel())
-    # best_config = res.minl_conf[best_config_idx, :]
-    best_config = global_argmin_x
-    LOG.info('global argmin x found {}'.format(best_config))
+    best_config_idx = np.argmin(res.minl.ravel())
+    best_config = res.minl_conf[best_config_idx, :]
+    LOG.info('best ucb {} , argmin x {}'.format(res.minl[best_config_idx], best_config))
     best_config = X_scaler.inverse_transform(best_config)
     # Decode one-hot encoding into categorical knobs
     best_config = dummy_encoder.inverse_transform(best_config)
