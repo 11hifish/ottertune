@@ -161,9 +161,9 @@ class GP_UCB(object):
         self.sess.run(self.calc_kernel, feed_dict={self.ridge: ridge})
         K_y_val = self.sess.run(self.calc_K_y, feed_dict={self.y_train_place: y_train})
 
-        # LOG.info('K val {}'.format(self.sess.run(self.K)))
-        # LOG.info('K * y {}'.format(K_y_val))
-        # LOG.info('X train {}'.format(self.sess.run(self.X_train)))
+        LOG.info('K val {}'.format(self.sess.run(self.K)))
+        LOG.info('K * y {}'.format(K_y_val))
+        LOG.info('X train {}'.format(self.sess.run(self.X_train)))
         return self
 
     def predict(self, X_test, X_min=None, X_max=None, constraint_helper=None,
@@ -197,9 +197,10 @@ class GP_UCB(object):
                     argmin_x = argmin_valid
                     ucb_x = ucb_val
             # update global
-            if (global_min_ucb is None or global_min_ucb > ucb_x) and np.isfinite(ucb_x):
+            if global_min_ucb is None or global_min_ucb > ucb_x:
                 global_min_ucb = ucb_x
                 global_argmin_x = argmin_x
+            LOG.info('argmin, ucb {} , {}'.format(global_min_ucb, global_min_ucb))
         return global_argmin_x, global_min_ucb
 
     def save_model(self, path='saved_gp/model.ckpt'):
