@@ -2,7 +2,7 @@ import gc
 import tensorflow as tf
 import numpy as np
 
-from util import get_analysis_logger
+from .util import get_analysis_logger
 
 LOG = get_analysis_logger(__name__)
 
