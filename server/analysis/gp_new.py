@@ -90,21 +90,22 @@ class GP_UCB(object):
     def build_graph_basic_gp(self):
         with tf.variable_scope('graph_gp'):
             # Nodes for distance computation
-            self.X_train_place = tf.placeholder(tf.float32, name="X_train")
+            self.X_train_place = tf.placeholder(tf.float64, name="X_train")
             self.X_train = tf.Variable([0], name='X_train_var',
-                                       dtype=tf.float32, validate_shape=False)
+                                       dtype=tf.float64, validate_shape=False)
             self.store_X_train = tf.assign(self.X_train, self.X_train_place,
                                            validate_shape=False)
             # Compute exp kernel
-            self.K = tf.Variable([0], name='kernel', dtype=tf.float32, validate_shape=False)
-            self.ridge = tf.placeholder(name='ridge', dtype=tf.float32)
+            self.K = tf.Variable([0], name='kernel', dtype=tf.float64, validate_shape=False)
+            self.ridge = tf.placeholder(name='ridge', dtype=tf.float64)
 
-            self.calc_kernel = tf.assign(self.K, self._calc_exp_kernel(self.X_train, self.X_train, self.magnitude,
+            self.calc_kernel = tf.assign(self.K, self._calc_exp_kernel(self.X_train,
+                                                                       self.X_train, self.magnitude,
                                          self.length_scale, self.ridge),
                                          validate_shape=False)
             # Compute kernel * y_train
-            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float32, validate_shape=False)
-            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float32)
+            self.K_y = tf.Variable([0], name='K_y', dtype=tf.float64, validate_shape=False)
+            self.y_train_place = tf.placeholder(name='y_train', dtype=tf.float64)
             K_inv = tf.matrix_inverse(self.K)
             self.calc_K_y = tf.assign(self.K_y, tf.matmul(K_inv, self.y_train_place),
                                       validate_shape=False)
@@ -115,9 +116,9 @@ class GP_UCB(object):
         with tf.variable_scope('graph_ucb'):
             # Input for prediction ( finding argmin UCB(x) )
             init_val = np.reshape(np.array([0] * x_train_dim), (1, -1))
-            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float32,
+            self.X_argmin = tf.Variable(init_val, name='X_argmin', dtype=tf.float64,
                                         validate_shape=False)
-            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float32)
+            self.X_test_place = tf.placeholder(name='X_test', dtype=tf.float64)
             self.assign_X_argmin = tf.assign(self.X_argmin, self.X_test_place,
                                              validate_shape=False)
             # K2 = Kernel(X_train, X_test)
@@ -125,45 +126,51 @@ class GP_UCB(object):
                                        self.magnitude, self.length_scale)
             # GP posterior mean
             self.gp_post_mean = tf.cast(tf.matmul(tf.transpose(K2),
-                                                  self.K_y),
-                                        tf.float32)
+                                                  self.K_y_val),
+                                        tf.float64)
             # GP posterior std
-            K_inv = tf.matrix_inverse(self.K)
+            K_inv = tf.matrix_inverse(self.K_val)
             self.gp_post_sigma = tf.cast((tf.sqrt(
                 tf.diag_part(self.magnitude - tf.matmul(tf.transpose(K2),
                                                         tf.matmul(K_inv, K2))))),
-                tf.float32)
+                tf.float64)
             # Output for prediction
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
                                                epsilon=self.epsilon)
             self.ucb = tf.squeeze(tf.subtract(self.ucb_mean_multiplier * self.gp_post_mean,
                                               self.ucb_sigma_multiplier * self.gp_post_sigma))
-
-            self.find_min_ucb = optimizer.minimize(tf.expand_dims(self.ucb, 0),
-                                                   var_list=[self.X_argmin])
+            self.find_min_ucb = optimizer.minimize(self.ucb)
 
     def fit(self, X_train, y_train, ridge=0.1):
         X_train, y_train = self.check_X_y(X_train, y_train)
 
+        self.X_train_val = X_train
+        self.y_train_val = y_train
         sample_size = X_train.shape[0]
         X_train_dim = len(X_train[0])
         if np.isscalar(ridge):
             ridge = np.ones(sample_size) * ridge
-
-        with self.graph.as_default():
-            self.build_graph_ucb(X_train_dim)
-            self.sess.run(tf.global_variables_initializer())
-
         ridge = np.ones(len(X_train)) * ridge
         # store X_train, for later computation
         self.sess.run(self.store_X_train, feed_dict={self.X_train_place: X_train})
         # compute kernel
         self.sess.run(self.calc_kernel, feed_dict={self.ridge: ridge})
-        K_y_val = self.sess.run(self.calc_K_y, feed_dict={self.y_train_place: y_train})
+
+        # get K, K_y and X train vals and reuse them later to speed up the process of
+        # finding argmin UCB(x)
+        self.K_val = self.sess.run(self.K)
+        self.K_y_val = self.sess.run(self.calc_K_y, feed_dict={self.y_train_place: y_train})
+        self.X_train_val = np.array(X_train)
 
         LOG.info('K val {}'.format(self.sess.run(self.K)))
-        LOG.info('K * y {}'.format(K_y_val))
+        LOG.info('K * y {}'.format(self.K_y_val))
         LOG.info('X train {}'.format(self.sess.run(self.X_train)))
+
+        with self.graph.as_default():
+            self.build_graph_ucb(X_train_dim)
+            all_vars_graph_ucb = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,
+                                                   scope='graph_ucb')
+            self.sess.run(tf.variables_initializer(all_vars_graph_ucb))
         return self
 
     def predict(self, X_test, X_min=None, X_max=None, constraint_helper=None,
@@ -171,13 +178,12 @@ class GP_UCB(object):
                 categorical_feature_steps=3):
         if not self._check_fitted():
             raise Exception("The model must be trained before making predictions!")
-
-        X_test = np.float32(self.check_array(X_test))
-        global_argmin_x = None
+        X_test = np.float64(self.check_array(X_test))
         global_min_ucb = None
+        global_argmin_x = None
         for x_idx in range(len(X_test)):
-            x_t = X_test[x_idx]  # shape [1, None]
-            x_t = np.reshape(x_t, (1, -1))
+            x_t = X_test[x_idx]
+            x_t = np.reshape(x_t, (1, -1))  # shape [1, None]
             self.sess.run(self.assign_X_argmin,
                           feed_dict={self.X_test_place: x_t})
             argmin_x = x_t
@@ -193,12 +199,14 @@ class GP_UCB(object):
                     argmin_valid = np.maximum(argmin_valid, X_min)
                 self.sess.run(self.assign_X_argmin,
                               feed_dict={self.X_test_place: argmin_valid})
+
                 if ucb_x is None or ucb_x > ucb_val:
                     argmin_x = argmin_valid
                     ucb_x = ucb_val
-            LOG.info('min ucb now {}'.format(ucb_x))
+                # LOG.info('min ucb now {}'.format(ucb_x))
+                # LOG.info('iter ...')
             # update global
-            if (global_min_ucb is None or global_min_ucb > ucb_x) and np.isfinite(ucb_x):
+            if global_min_ucb is None or global_min_ucb > ucb_x:
                 global_min_ucb = ucb_x
                 global_argmin_x = argmin_x
         return global_argmin_x, global_min_ucb
@@ -216,7 +224,7 @@ class GP_UCB(object):
             self.build_graph_ucb(x_dim)
             all_vars_graph_ucb = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,
                                                    scope='graph_ucb')
-            self.sess.run(tf.initialize_variables(all_vars_graph_ucb))
+            self.sess.run(tf.variables_initializer(all_vars_graph_ucb))
 
     def check_X_y(self, X, y):
         from sklearn.utils.validation import check_X_y
